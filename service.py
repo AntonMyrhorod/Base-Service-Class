@@ -55,7 +55,7 @@ class Service(object):
 	__jobsQueues = {}
 
 
-	def __init__(self, name, workerTimeout = 1, numWorkerThreads = 16, jobQueueMaxSize = 100):
+	def __init__(self, name, workerTimeout = 0, numWorkerThreads = 16, jobQueueMaxSize = 100):
 		"""
 		Service constructor.
 		[in] name - Service name.
@@ -73,7 +73,7 @@ class Service(object):
 		self.__jobs = Queue(maxsize = jobQueueMaxSize)
 
 		try:
-			for i in range(numWorkerThreads):
+			for _ in range(numWorkerThreads):
 				workerThread = Thread(target = self.__worker)
 				self.__workerThreads.append(workerThread)
 		except Exception as e:
@@ -178,6 +178,55 @@ class Service(object):
 			Log.error(str(e))
 
 
+	def __request(self, package):
+		"""
+		Executes request method.
+		[in] package - Contained method and arguments to call in request service.
+		"""
+
+		method = getattr(self, package.requestMethod, None)
+		
+		if method == None:
+			Log.warning("Method " + package.requestMethod + " is not found in " + self.name)
+			return
+
+		Log.debug(self.name + " call " + package.requestMethod)
+
+		if package.requestArguments == None:
+			requestResult = method()
+		else:
+			requestResult = method(*package.requestArguments)
+		
+		if requestResult == None:
+			package.responseArguments = None
+		elif isinstance(requestResult, Iterable) == True: 
+			package.responseArguments = requestResult
+		else:
+			package.responseArguments = [requestResult]
+
+		self.sendResponse(package)
+			
+
+	def __respond(self, package):
+		"""
+		Executes respond method.
+		[in] package - Contained method and arguments to call in response service.
+		"""
+
+		method = getattr(self, package.responseMethod, None)
+		
+		if method == None:
+			Log.warning("Method " + package.responseMethod + " is not found in " + self.name)
+			return 
+		
+		Log.debug(self.name + " call " + package.responseMethod)
+		
+		if package.responseArguments == None:
+			method()
+		else:
+			method(*package.responseArguments)
+
+
 	def __worker(self):
 		"""
 		Worker cycle gets packages from queue, calls request methods and response methods.
@@ -188,45 +237,13 @@ class Service(object):
 				package = self.__jobs.get(timeout = self.__workerTimeout)
 
 				if package.requestServiceName == self.name:
-					method = getattr(self, package.requestMethod, None)
-
-					if method == None:
-						Log.warning("Method " + package.requestMethod + " is not found in " + self.name)
-
-					else:
-						Log.debug(self.name + " call " + package.requestMethod)
-
-						if package.requestArguments == None:
-							requestResult = method()
-						
-						else:
-							requestResult = method(*package.requestArguments)
-						
-						if requestResult == None:
-							package.responseArguments = None
-						elif isinstance(requestResult, Iterable) == True: 
-							package.responseArguments = requestResult
-						else:
-							package.responseArguments = [requestResult]
-
-						self.sendResponse(package)
+					self.__request(package)
 
 				elif package.responseServiceName == self.name:
-					method = getattr(self, package.responseMethod, None)
-
-					if method == None:
-						Log.warning("Method " + package.responseMethod + " is not found in " + self.name)
-					
-					else:
-						Log.debug(self.name + " call " + package.responseMethod)
-
-						if package.responseArguments == None:
-							method()
-						
-						else:
-							method(*package.responseArguments)
+					self.__respond(package)
 
 				self.__jobs.task_done()
+
 			except Empty:
 				continue
 			except Exception as e:

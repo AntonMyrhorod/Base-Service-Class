@@ -16,7 +16,7 @@ class User(Service):
 	"""
 
 	def __init__(self):
-		super().__init__(self.__class__.__name__)
+		super().__init__(self.__class__.__name__, workerTimeout = 1)
 
 
 	def start(self):
@@ -39,7 +39,7 @@ class Calculator(Service):
 	"""
 
 	def __init__(self):
-		super().__init__(self.__class__.__name__)
+		super().__init__(self.__class__.__name__, workerTimeout = 1)
 
 
 	def start(self):
@@ -55,20 +55,16 @@ class Calculator(Service):
 def main():
 	log.init("debug", "main.log")
 
-	c = Calculator()
-	u = User()
+	calculator_service = Calculator()
+	user_service = User()
 
-	c.start()
-	u.start()
+	calculator_service.start()
+	user_service.start()
 
-	sleep(1)
+	user_service.askPlusOperation(34, 21)
 
-	u.askPlusOperation(34, 21)
-
-	sleep(1)
-
-	c.stop()
-	u.stop()
+	calculator_service.stop()
+	user_service.stop()
 
 
 if __name__ == '__main__':
